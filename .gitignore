@@ -1,0 +1,13 @@
+.vs/*
+Library/*
+Temp/*
+obj/*
+.vsconfig
+*.csproj
+*.csproj.*
+*.sln
+*.sln.*
+Logs/*
+.DS_Store
+UserSettings/*
+Deploy/*
