@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class InvadersController : MonoBehaviour, IEntityController
+public class InvadersController : MonoBehaviour, IEntityController, ISerializableInvadersController
 {
     public GameObject[] InvaderPrefabs = null;
 
+    private HashSet<GameObject> uniqueInvaderPrefabs = null;
     private ILogController logController = null;
     private IGameController gameController = null;
 
@@ -33,7 +34,7 @@ public class InvadersController : MonoBehaviour, IEntityController
 
     private float moveSpeedHorz { get; } = 0.5f;
     private float moveSpeedVert { get; } = 0.75f;
-    private Vector2 moveDirection { get; set; } = Vector2.right;
+    public Vector2 MoveDirection { get; set; } = Vector2.right;
 
     private float moveTimeout
     {
@@ -45,7 +46,7 @@ public class InvadersController : MonoBehaviour, IEntityController
 
     public void CleanUp()
     {
-        moveDirection = Vector2.right;
+        MoveDirection = Vector2.right;
         foreach (var projectile in projectiles)
         {
             projectile.OnDie -= OnProjectileDie;
@@ -63,11 +64,11 @@ public class InvadersController : MonoBehaviour, IEntityController
             }
             column.Clear();
         }
+        invadersCount = 0;
     }
 
     private void SpawnInvaders()
     {
-        invadersCount = 0;
         var offset = new Vector2(0.5f * SpawnDistance.x * (HorizontalCount - 1), 0.0f);
         for (var j = 0; j < InvaderPrefabs.Length; j++)
             for (var i = 0; i < HorizontalCount; i++)
@@ -75,22 +76,61 @@ public class InvadersController : MonoBehaviour, IEntityController
                 var position = offset;
                 position.x -= i * SpawnDistance.x;
                 position.y += j * SpawnDistance.y;
-                var inviderPrefab = InvaderPrefabs[j];
-                if (inviderPrefab == null)
+                var invaderPrefab = InvaderPrefabs[j];
+                if (invaderPrefab == null)
                 {
-                    logController.Error(nameof(inviderPrefab) + " is null");
+                    logController.Error(nameof(InvaderPrefabs) + " contains null");
                     return;
                 }
-                var invaderObject = Instantiate(inviderPrefab, position, Quaternion.identity, transform);
-                invaderObject.name = InvaderPrefabs[j].name;
-                var invader = invaderObject.GetComponent<IControllableEntity>();
-                if (invaders[i] == null)
-                    invaders[i] = new List<IControllableEntity>();
-                invader.OnDie += OnInviderDie;
-                invaders[i].Add(invader);
-                invadersCount += 1;
+                CreateInvader(invaderPrefab, position, i);
             }
     }
+
+    public IEnumerable<GameObject> UniqueInvaderPrefabs
+    {
+        get
+        {
+            if (uniqueInvaderPrefabs == null)
+            {
+                uniqueInvaderPrefabs = new HashSet<GameObject>();
+                foreach (var invaderPrefab in InvaderPrefabs)
+                    if (invaderPrefab != null)
+                        uniqueInvaderPrefabs.Add(invaderPrefab);
+            }
+            return uniqueInvaderPrefabs;
+        }
+    }
+    public IEnumerable<IEnumerable<IControllableEntity>> Invaders => invaders;
+
+    public IControllableEntity CreateInvader(string prefabName, Vector2 position, int column)
+    {
+        for (var i = 0; i < InvaderPrefabs.Length; i++)
+        {
+            var prefab = InvaderPrefabs[i];
+            if (prefab == null)
+                continue;
+            if (prefab.name != prefabName)
+                continue;
+            return CreateInvader(prefab, position, column);
+        }
+        logController.Error("Invader prefab with name \"" + prefabName + "\" not found");
+        return null;
+    }
+
+    private IControllableEntity CreateInvader(GameObject inviderPrefab, Vector2 position, int column)
+    {
+        var invaderObject = Instantiate(inviderPrefab, position, Quaternion.identity, transform);
+        invaderObject.name = inviderPrefab.name;
+        var invader = invaderObject.GetComponent<IControllableEntity>();
+        if (invaders[column] == null)
+            invaders[column] = new List<IControllableEntity>();
+        invader.OnDie += OnInviderDie;
+        invaders[column].Add(invader);
+        invadersCount += 1;
+        return invader;
+    }
+
+    public IEnumerable<IEntity> GetProjectiles() => projectiles;
 
     private void OnProjectileDie(IEntity projectile)
     {
@@ -99,9 +139,17 @@ public class InvadersController : MonoBehaviour, IEntityController
 
     private void OnInviderDie(IEntity entity)
     {
-        invadersCount -= 1;
         for (var i = 0; i < HorizontalCount; i++)
-            invaders[i].Remove(entity as IControllableEntity);
+        {
+            var column = invaders[i];
+            if (column == null)
+                continue;
+            if (invaders[i].Remove(entity as IControllableEntity))
+            {
+                invadersCount -= 1;
+                break;
+            }
+        }            
         if (invadersCount <= 0)
             gameController.Win();
     }
@@ -127,6 +175,13 @@ public class InvadersController : MonoBehaviour, IEntityController
             return;
         var entity = top[Random.Range(0, top.Count)];
         var projectile = entity.Gun.Fire(ShootDirection);
+        AddProjectile(projectile);
+    }
+
+    public void AddProjectile(IEntity projectile)
+    {
+        if (projectile == null)
+            return;
         projectiles.Add(projectile);
         projectile.OnDie += OnProjectileDie;
     }
@@ -137,11 +192,13 @@ public class InvadersController : MonoBehaviour, IEntityController
         if (time < lastMoveTime + moveTimeout)
             return;
         lastMoveTime = time;
-        var dir = moveDirection;
+        var dir = MoveDirection;
         var offset = dir * moveSpeedHorz;
         var outOfBounds = false;
         foreach (var column in invaders)
         {
+            if (column == null)
+                continue;
             foreach (var invader in column)
             {
                 var position = invader.Position;
@@ -157,13 +214,16 @@ public class InvadersController : MonoBehaviour, IEntityController
         if (outOfBounds)
         {
             dir.x = -dir.x;
-            moveDirection = dir;
+            MoveDirection = dir;
             offset = dir * moveSpeedHorz * Time.deltaTime;
-            //if (moveDirection.x > 0.0f)
+            //if (MoveDirection.x > 0.0f)
                 offset.y -= moveSpeedVert;
             outOfBounds = false;
         }
         foreach (var column in invaders)
+        {
+            if (column == null)
+                continue;
             foreach (var invader in column)
             {
                 var position = invader.Position;
@@ -172,6 +232,7 @@ public class InvadersController : MonoBehaviour, IEntityController
                     outOfBounds = true;
                 invader.Position = position;
             }
+        }
         if (outOfBounds)
             gameController.GameOver();
     }
@@ -188,6 +249,8 @@ public class InvadersController : MonoBehaviour, IEntityController
     {
         logController = GetComponent<ILogController>();
         gameController = GetComponent<IGameController>();
+        if (gameController == null)
+            logController.Error(nameof(gameController) + " is null");
     }
 
     // Update is called once per frame
@@ -200,7 +263,11 @@ public class InvadersController : MonoBehaviour, IEntityController
     private void OnDestroy()
     {
         foreach (var column in invaders)
+        {
+            if (column == null)
+                continue;
             foreach (var invader in column)
                 invader.OnDie -= OnInviderDie;
+        }
     }
 }

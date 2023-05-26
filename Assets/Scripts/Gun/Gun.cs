@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Gun : MonoBehaviour, IGun
+public class Gun : MonoBehaviour, IGun, ISerializableGun
 {
     private ILogController logController = null;
     public GameObject[] projectilePrefabs = null;
@@ -20,7 +20,39 @@ public class Gun : MonoBehaviour, IGun
             logController.Error(nameof(projectilePrefab) + " with index " + index + " is null");
             return null;
         }
-        var projectileObject = Instantiate(projectilePrefab, transform.position, Quaternion.identity, transform.parent);
+        return CreateProjectile(projectilePrefab, direction, transform.position, transform.parent);
+    }
+
+    public bool HasProjectilePrefab(string prefabName)
+    {
+        foreach (var projectilePrefab in projectilePrefabs)
+            if ((projectilePrefab != null) && (projectilePrefab.name == prefabName))
+                return true;
+        return false;
+    }
+
+    public IEntity CreateProjectile(string prefabName, Vector2 direction, Vector2 position, Transform parent)
+    {
+        if ((projectilePrefabs == null) || (projectilePrefabs.Length <= 0))
+        {
+            logController.Error(nameof(projectilePrefabs) + " is null or empty");
+            return null;
+        }
+        foreach (var projectilePrefab in projectilePrefabs)
+            if ((projectilePrefab != null) && (projectilePrefab.name == prefabName))
+                return CreateProjectile(projectilePrefab, direction, position, parent);
+        logController.Error("Projectile prefab with name \"" + prefabName + "\" not found");
+        return null;
+    }
+
+    private IEntity CreateProjectile(GameObject projectilePrefab, Vector2 direction, Vector2 position, Transform parent)
+    {
+        if (projectilePrefab == null)
+        {
+            logController.Error(nameof(projectilePrefab) + " is null");
+            return null;
+        }
+        var projectileObject = Instantiate(projectilePrefab, position, Quaternion.identity, parent);
         projectileObject.name = projectilePrefab.name;
         var projectile = projectileObject.GetComponent<IProjectile>();
         projectile.Direction = direction;

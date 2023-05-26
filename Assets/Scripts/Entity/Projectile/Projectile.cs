@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class Projectile : Entity, IProjectile
+public class Projectile : Entity, ISerializableProjectile
 {
     private ILogController logController = null;
     private ISpaceshipController spaceshipController = null;
@@ -9,6 +9,7 @@ public class Projectile : Entity, IProjectile
     public float Speed  = 20.0f;
     public GameObject explosionEffect = null;
 
+    public Vector2 Position { get => transform.position; }
     public Vector2 Direction { get; set; }
     public IEntity Shooter { get; set; }
 

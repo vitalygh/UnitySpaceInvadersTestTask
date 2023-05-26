@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.Events;
 
-public class Entity : MonoBehaviour, IEntity
+public class Entity : MonoBehaviour, ISerializableEntity, IEntity
 {
+    public string Name { get => gameObject.name; }
     public UnityAction<IEntity> OnDie { get; set; }
 
     public void Kill()

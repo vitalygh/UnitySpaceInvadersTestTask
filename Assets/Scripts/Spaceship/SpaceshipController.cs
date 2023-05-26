@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class SpaceshipController : MonoBehaviour, ISpaceshipController
+public class SpaceshipController : MonoBehaviour, ISerializableSpaceshipController
 {
     public GameObject SpaceshipPrefab = null;
 
@@ -36,7 +36,7 @@ public class SpaceshipController : MonoBehaviour, ISpaceshipController
             currentProjectile.Kill();
     }
 
-    public void Init()
+    private void Init()
     {
         logController = GetComponent<ILogController>();
         if (inputControllers == null)
@@ -51,6 +51,13 @@ public class SpaceshipController : MonoBehaviour, ISpaceshipController
             }
         }
     }
+
+    public IEntity CurrentProjectile
+    { 
+        get => currentProjectile;
+        set => currentProjectile = value;
+    }
+    public IControllableEntity Spaceship { get => spaceship; }
 
     // Start is called before the first frame update
     void Start()

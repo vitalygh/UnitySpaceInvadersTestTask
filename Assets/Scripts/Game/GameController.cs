@@ -5,6 +5,8 @@ public class GameController : MonoBehaviour, IGameController
 {
     private ILogController logController = null;
     private IEntityController[] entityControllers = null;
+    private ISerializationController serializationController = null;
+    private bool serialized = false;
 
     public void GameOver()
     {
@@ -73,6 +75,44 @@ public class GameController : MonoBehaviour, IGameController
         entityControllers = GetComponents<IEntityController>();
         if ((entityControllers == null) || (entityControllers.Length <= 0))
             logController.Warning(nameof(entityControllers) + " is null or empty");
-        Restart();
+        serializationController = GetComponent<ISerializationController>();
+        if (serializationController == null)
+            logController.Warning(nameof(serializationController) + " is null");
+        if ((serializationController == null) || !serializationController.Load())
+            Restart();
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus)
+        {
+            if (!serialized && serializationController != null)
+            {
+                serializationController.Save();
+                serialized = true;
+            }
+        }
+        else
+            serialized = false;
+    }
+
+    private void OnApplicationPause(bool pause)
+    {
+        if (pause)
+        {
+            if (!serialized && serializationController != null)
+            {
+                serializationController.Save();
+                serialized = true;
+            }
+        }
+        else
+            serialized = false;
+    }
+
+    private void OnApplicationQuit()
+    {
+        if (!serialized && (serializationController != null))
+            serializationController.Save();
     }
 }
