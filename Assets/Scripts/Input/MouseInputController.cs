@@ -3,7 +3,7 @@ using UnityEngine.Events;
 
 public class MouseInputController : MonoBehaviour, IInputController
 {
-    private bool isEnabled = true;
+    private bool isEnabled = false;
     private Vector2 position = Vector2.zero;
     private float Sensitivity { get => 3.0f; }
     public UnityAction<Vector2> OnMove { set; get; }
@@ -25,7 +25,10 @@ public class MouseInputController : MonoBehaviour, IInputController
             if (Input.GetMouseButtonDown(1))
                 isEnabled = !isEnabled;
             if (!isEnabled)
+            {
+                position = Input.mousePosition;
                 return;
+            }
             Vector2 newPosition = Input.mousePosition;
             var delta = newPosition - position;
             if (delta.magnitude > Mathf.Epsilon)
