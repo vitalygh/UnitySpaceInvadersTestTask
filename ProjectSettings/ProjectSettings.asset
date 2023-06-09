@@ -757,7 +757,10 @@ PlayerSettings:
   webGLLinkerTarget: 1
   webGLThreadsSupport: 0
   webGLDecompressionFallback: 0
-  scriptingDefineSymbols: {}
+  scriptingDefineSymbols:
+    Android: USING_ZENJECT
+    Standalone: USING_ZENJECT
+    iPhone: USING_ZENJECT
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend: {}

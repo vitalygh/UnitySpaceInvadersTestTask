@@ -12,10 +12,4 @@ public class Entity : MonoBehaviour, ISerializableEntity, IEntity
         OnDie = null;
         Destroy(gameObject);
     }
-
-    private void OnDestroy()
-    {
-        OnDie?.Invoke(this);
-        OnDie = null;
-    }
 }

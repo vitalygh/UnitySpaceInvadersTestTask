@@ -1,4 +1,8 @@
+//USING_ZENJECT
 using UnityEngine;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
 public class Effect : Entity
 {
@@ -28,4 +32,8 @@ public class Effect : Entity
     {
         UpdateScale();
     }
+
+#if USING_ZENJECT
+    public class Factory : PlaceholderFactory<Object, Vector3, IEntity> { }
+#endif
 }

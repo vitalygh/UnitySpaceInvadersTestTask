@@ -1,9 +1,31 @@
+//USING_ZENJECT
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
-public class InvadersController : MonoBehaviour, IEntityController, ISerializableInvadersController
+public class InvadersController :
+#if USING_ZENJECT
+    IInitializable, ITickable, IDisposable,
+#else
+    MonoBehaviour,
+#endif
+    IEntityController, ISerializableInvadersController
 {
-    public GameObject[] InvaderPrefabs = null;
+    [Serializable]
+    public class Settings
+    {
+        public GameObject[] InvaderPrefabs = null;
+    }
+
+    public Settings settings = null;
+
+#if USING_ZENJECT
+    private Invader.Factory invaderFactory = null;
+#endif
 
     private HashSet<GameObject> uniqueInvaderPrefabs = null;
     private ILogController logController = null;
@@ -11,9 +33,10 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
 
     private const int HorizontalCount = 11;
 
-    private Vector2 invaderBorders { get; } = new Vector2(9.0f, 8.0f);
-    private Vector2 SpawnDistance { get; } = new Vector2(1.5f, 1.5f);
-    private Vector2 ShootDirection { get; } = -Vector2.up;
+    private static Vector2 invaderBorders { get; } = new Vector2(9.0f, 8.0f);
+    private static Vector2 SpawnDistance { get; } = new Vector2(1.5f, 1.5f);
+    private static Vector2 ShootDirection { get; } = -Vector2.up;
+    private static Vector2 TemporaryInvaderSpawnPosition { get; } = new Vector2(0.0f, 2.0f * invaderBorders.y);
     private int invadersCount = 0;
     private float MoveTimeoutMax { get; } = 2.0f;
     private float MoveTimeoutMin { get; } = 0.05f;
@@ -24,7 +47,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
     private float lastMoveTime = 0.0f;
     private float invadersMultiplier
     { 
-        get => (float)Mathf.Max(0, invadersCount - (gameController?.Level ?? 0)) / (HorizontalCount * InvaderPrefabs.Length);
+        get => (float)Mathf.Max(0, invadersCount - (gameController?.Level ?? 0)) / (HorizontalCount * settings.InvaderPrefabs.Length);
     }
 
     private float shootTimeout
@@ -41,8 +64,26 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         get => MoveTimeoutMin + (MoveTimeoutMax - MoveTimeoutMin) * invadersMultiplier;
     }
 
-    private List<IControllableEntity>[] invaders = new List<IControllableEntity>[HorizontalCount];
-    private HashSet<IEntity> projectiles = new HashSet<IEntity>();
+    private readonly List<IControllableEntity>[] invaders = new List<IControllableEntity>[HorizontalCount];
+    private readonly HashSet<IEntity> projectiles = new();
+
+#if USING_ZENJECT
+    [Inject]
+    private void Construct(Invader.Factory invaderFactory, Settings settings)
+    {
+        this.invaderFactory = invaderFactory;
+        this.settings = settings;
+    }
+#endif
+
+#if USING_ZENJECT
+    [Inject]
+#endif
+    private void Construct(ILogController logController, IGameController gameController)
+    {
+        this.logController = logController;
+        this.gameController = gameController;
+    }
 
     public void CleanUp()
     {
@@ -59,7 +100,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
                 continue;
             foreach (var entity in column)
             {
-                entity.OnDie -= OnInviderDie;
+                entity.OnDie -= OnInvaderDie;
                 entity.Kill();
             }
             column.Clear();
@@ -70,16 +111,16 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
     private void SpawnInvaders()
     {
         var offset = new Vector2(0.5f * SpawnDistance.x * (HorizontalCount - 1), 0.0f);
-        for (var j = 0; j < InvaderPrefabs.Length; j++)
+        for (var j = 0; j < settings.InvaderPrefabs.Length; j++)
             for (var i = 0; i < HorizontalCount; i++)
             {
                 var position = offset;
                 position.x -= i * SpawnDistance.x;
                 position.y += j * SpawnDistance.y;
-                var invaderPrefab = InvaderPrefabs[j];
+                var invaderPrefab = settings.InvaderPrefabs[j];
                 if (invaderPrefab == null)
                 {
-                    logController.Error(nameof(InvaderPrefabs) + " contains null");
+                    logController.Error(nameof(settings.InvaderPrefabs) + " contains null");
                     return;
                 }
                 CreateInvader(invaderPrefab, position, i);
@@ -93,7 +134,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
             if (uniqueInvaderPrefabs == null)
             {
                 uniqueInvaderPrefabs = new HashSet<GameObject>();
-                foreach (var invaderPrefab in InvaderPrefabs)
+                foreach (var invaderPrefab in settings.InvaderPrefabs)
                     if (invaderPrefab != null)
                         uniqueInvaderPrefabs.Add(invaderPrefab);
             }
@@ -104,9 +145,8 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
 
     public IControllableEntity CreateInvader(string prefabName, Vector2 position, int column)
     {
-        for (var i = 0; i < InvaderPrefabs.Length; i++)
+        foreach(var prefab in UniqueInvaderPrefabs)
         {
-            var prefab = InvaderPrefabs[i];
             if (prefab == null)
                 continue;
             if (prefab.name != prefabName)
@@ -117,17 +157,42 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         return null;
     }
 
-    private IControllableEntity CreateInvader(GameObject inviderPrefab, Vector2 position, int column)
+    public void CreateTemporaryInvader(GameObject prefab, UnityAction<IControllableEntity> whileEntityCreated)
     {
-        var invaderObject = Instantiate(inviderPrefab, position, Quaternion.identity, transform);
-        invaderObject.name = inviderPrefab.name;
-        var invader = invaderObject.GetComponent<IControllableEntity>();
+        var invader = CreateInvader(prefab, TemporaryInvaderSpawnPosition);
+        if (invader != null)
+        {
+            whileEntityCreated?.Invoke(invader);
+            invader.Kill();
+        }
+    }
+
+    private IControllableEntity CreateInvader(GameObject invaderPrefab, Vector2 position, int column)
+    {
+        if ((column < 0) || (column >= invaders.Length))
+            return null;
+        var invader = CreateInvader(invaderPrefab, position);
+        if (invader == null)
+            return null;
+        invader.Position = position;
         if (invaders[column] == null)
             invaders[column] = new List<IControllableEntity>();
-        invader.OnDie += OnInviderDie;
+        invader.OnDie += OnInvaderDie;
         invaders[column].Add(invader);
         invadersCount += 1;
         return invader;
+    }
+
+    private IControllableEntity CreateInvader(GameObject invaderPrefab, Vector2 position)
+    {
+#if USING_ZENJECT
+        var invaderEntity = invaderFactory.Create(invaderPrefab, position);
+#else
+        var invaderObject = Instantiate(invaderPrefab, position, Quaternion.identity, transform);
+        invaderObject.name = invaderPrefab.name;
+        var invaderEntity = invaderObject.GetComponent<IControllableEntity>();
+#endif
+        return invaderEntity;
     }
 
     public IEnumerable<IEntity> GetProjectiles() => projectiles;
@@ -137,7 +202,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         projectiles.Remove(projectile);
     }
 
-    private void OnInviderDie(IEntity entity)
+    private void OnInvaderDie(IEntity entity)
     {
         for (var i = 0; i < HorizontalCount; i++)
         {
@@ -149,9 +214,9 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
                 invadersCount -= 1;
                 break;
             }
-        }            
+        }
         if (invadersCount <= 0)
-            gameController.Win();
+            gameController?.Win();
     }
 
     private void UpdateShoot()
@@ -173,7 +238,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         }
         if (top.Count <= 0)
             return;
-        var entity = top[Random.Range(0, top.Count)];
+        var entity = top[UnityEngine.Random.Range(0, top.Count)];
         var projectile = entity.Gun.Fire(ShootDirection);
         AddProjectile(projectile);
     }
@@ -215,7 +280,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         {
             dir.x = -dir.x;
             MoveDirection = dir;
-            offset = dir * moveSpeedHorz * Time.deltaTime;
+            offset = moveSpeedHorz * Time.deltaTime * dir;
             //if (MoveDirection.x > 0.0f)
                 offset.y -= moveSpeedVert;
             outOfBounds = false;
@@ -234,7 +299,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
             }
         }
         if (outOfBounds)
-            gameController.GameOver();
+            gameController?.GameOver();
     }
 
     public void Restart()
@@ -243,14 +308,36 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
         SpawnInvaders();
     }
 
+#if USING_ZENJECT
+    public void Initialize()
+    {
+        Start();
+    }
+
+    public void Tick()
+    {
+        Update();
+    }
+
+    public void Dispose()
+    {
+        OnDestroy();
+    }
+#endif
 
     // Start is called before the first frame update
-    void Start()
+    private void Start()
     {
-        logController = GetComponent<ILogController>();
-        gameController = GetComponent<IGameController>();
+#if !USING_ZENJECT
+        Construct(GetComponent<ILogController>(), GetComponent<IGameController>());
+#else
+        if (invaderFactory == null)
+            logController.Warning(nameof(invaderFactory) + " is null");
+#endif
         if (gameController == null)
-            logController.Error(nameof(gameController) + " is null");
+            logController.Warning(nameof(gameController) + " is null");
+        if (settings == null)
+            logController.Warning(nameof(settings) + " is null");
     }
 
     // Update is called once per frame
@@ -267,7 +354,7 @@ public class InvadersController : MonoBehaviour, IEntityController, ISerializabl
             if (column == null)
                 continue;
             foreach (var invader in column)
-                invader.OnDie -= OnInviderDie;
+                invader.OnDie -= OnInvaderDie;
         }
     }
 }

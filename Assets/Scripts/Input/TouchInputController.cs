@@ -1,13 +1,36 @@
+//USING_ZENJECT
 using UnityEngine;
 using UnityEngine.Events;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
-public class TouchInputController : MonoBehaviour, IInputController
+public class TouchInputController :
+#if USING_ZENJECT
+    IInitializable, ITickable, 
+#else
+    MonoBehaviour,
+#endif
+    IInputController
+
 {
     private int fingerId = -1;
     private Vector2 position = Vector2.zero;
     private float Sensitivity { get => 2.0f; }
     public UnityAction<Vector2> OnMove { set; get; }
     public UnityAction OnFire { set; get; }
+
+#if USING_ZENJECT
+    public void Initialize()
+    {
+        Start();
+    }
+
+    public void Tick()
+    {
+        Update();
+    }
+#endif
 
     // Start is called before the first frame update
     void Start()
@@ -34,7 +57,7 @@ public class TouchInputController : MonoBehaviour, IInputController
                 var delta = newPosition - position;
                 if (delta.magnitude > Mathf.Epsilon)
                 {
-                    OnMove?.Invoke(delta * Sensitivity * Time.deltaTime);
+                    OnMove?.Invoke(Sensitivity * Time.deltaTime * delta);
                     position = newPosition;
                 }
             }

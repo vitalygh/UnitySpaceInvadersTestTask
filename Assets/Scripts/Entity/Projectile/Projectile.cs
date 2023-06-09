@@ -1,4 +1,8 @@
+//USING_ZENJECT
 using UnityEngine;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
 public class Projectile : Entity, ISerializableProjectile
 {
@@ -13,12 +17,22 @@ public class Projectile : Entity, ISerializableProjectile
     public Vector2 Direction { get; set; }
     public IEntity Shooter { get; set; }
 
+#if USING_ZENJECT
+    [Inject]
+#endif
+    private void Construct(ILogController logController,
+        ISpaceshipController spaceshipController,
+        IEffectsController effectController)
+    {
+        this.logController = logController;
+        this.spaceshipController = spaceshipController;
+        this.effectController = effectController;
+    }
+
     private void SpawnEffect()
     {
         if (explosionEffect == null)
             return;
-        if ((effectController == null) && (transform.parent != null))
-            effectController = transform.parent.GetComponent<IEffectsController>();
         if (effectController != null)
             effectController.SpawnEffect(explosionEffect, transform.position);
     }
@@ -33,7 +47,7 @@ public class Projectile : Entity, ISerializableProjectile
         if (spaceshipController == null)
             return;
         var position = transform.position;
-        var move = Direction * Speed * Time.deltaTime;
+        var move = Speed * Time.deltaTime * Direction;
         position.x += move.x;
         position.y += move.y;
         transform.position = position;
@@ -48,10 +62,15 @@ public class Projectile : Entity, ISerializableProjectile
     // Start is called before the first frame update
     void Start()
     {
-        logController = transform.parent.GetComponent<ILogController>();
-        spaceshipController = transform.parent.GetComponent<ISpaceshipController>();
+#if !USING_ZENJECT
+        Construct(transform.parent.GetComponent<ILogController>(),
+           transform.parent.GetComponent<ISpaceshipController>(),
+           transform.parent.GetComponent<IEffectsController>());
+#endif
         if (spaceshipController == null)
             logController.Error(nameof(spaceshipController) + " is null");
+        if (effectController == null)
+            logController.Error(nameof(effectController) + " is null");
     }
 
     // Update is called once per frame
@@ -70,6 +89,13 @@ public class Projectile : Entity, ISerializableProjectile
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        var projectile = collision.GetComponent<IProjectile>();
+        if (projectile != null)
+        {
+            SpawnEffect();
+            OnCollide();
+            return;
+        }
         var entity = collision.GetComponent<IControllableEntity>();
         if ((entity != null) && (entity != Shooter))
         {
@@ -78,12 +104,9 @@ public class Projectile : Entity, ISerializableProjectile
             OnCollide();
             return;
         }
-        var projectile = collision.GetComponent<IProjectile>();
-        if (projectile != null)
-        {
-            SpawnEffect();
-            OnCollide();
-            return;
-        }
     }
+
+#if USING_ZENJECT
+    public class Factory : PlaceholderFactory<Object, Vector3, IEntity> { }
+#endif
 }

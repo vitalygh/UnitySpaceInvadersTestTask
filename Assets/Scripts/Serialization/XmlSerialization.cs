@@ -1,7 +1,15 @@
+//USING_ZENJECT
 using System.IO;
 using System.Xml.Serialization;
+#if !USING_ZENJECT
+using UnityEngine;
+#endif
 
-public class XmlSerialization<T> : ISerialization<T>
+public class XmlSerialization<T> :
+#if !USING_ZENJECT
+    MonoBehaviour,
+#endif
+    ISerialization<T>
 {
     public string Format => "xml";
 

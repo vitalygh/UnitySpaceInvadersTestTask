@@ -1,12 +1,28 @@
+//USING_ZENJECT
 using UnityEngine;
 using UnityEngine.Events;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
-public class GameController : MonoBehaviour, IGameController
+public class GameController :
+    MonoBehaviour,
+    IGameController
 {
     private ILogController logController = null;
     private IEntityController[] entityControllers = null;
     private ISerializationController serializationController = null;
     private bool serialized = false;
+
+#if USING_ZENJECT
+    [Inject]
+#endif
+    private void Construct(ILogController logController, ISerializationController serializationController, IEntityController[] entityControllers)
+    {
+        this.logController = logController;
+        this.serializationController = serializationController;
+        this.entityControllers = entityControllers;
+    }
 
     public void GameOver()
     {
@@ -25,8 +41,9 @@ public class GameController : MonoBehaviour, IGameController
 
     public void Restart()
     {
-        foreach (var entityController in entityControllers)
-            entityController.Restart();
+        if (entityControllers != null)
+            foreach (var entityController in entityControllers)
+                entityController.Restart();
     }
 
     private int score = 0;
@@ -67,17 +84,18 @@ public class GameController : MonoBehaviour, IGameController
     public UnityAction<int> OnHPChanged { get; set; }
     public UnityAction<int> OnLevelChanged { get; set; }
 
-
     // Start is called before the first frame update
     void Start()
     {
-        logController = GetComponent<ILogController>();
-        entityControllers = GetComponents<IEntityController>();
-        if ((entityControllers == null) || (entityControllers.Length <= 0))
-            logController.Warning(nameof(entityControllers) + " is null or empty");
-        serializationController = GetComponent<ISerializationController>();
+#if !USING_ZENJECT
+        Construct(GetComponent<ILogController>(),
+            GetComponent<ISerializationController>(),
+            GetComponents<IEntityController>());
+#endif
         if (serializationController == null)
             logController.Warning(nameof(serializationController) + " is null");
+        if ((entityControllers == null) || (entityControllers.Length <= 0))
+            logController.Warning(nameof(entityControllers) + " is null or empty");
         if ((serializationController == null) || !serializationController.Load())
             Restart();
     }
@@ -100,7 +118,7 @@ public class GameController : MonoBehaviour, IGameController
     {
         if (pause)
         {
-            if (!serialized && serializationController != null)
+            if (!serialized && (serializationController != null))
             {
                 serializationController.Save();
                 serialized = true;

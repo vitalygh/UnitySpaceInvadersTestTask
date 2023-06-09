@@ -1,6 +1,12 @@
+//USING_ZENJECT
 using UnityEngine;
 
-public class UnityDebugLogController : MonoBehaviour, ILogController
+public class UnityDebugLogController :
+#if USING_ZENJECT
+#else
+    MonoBehaviour,
+#endif
+    ILogController
 {
     public void Notify(string message)
     {

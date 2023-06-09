@@ -1,29 +1,39 @@
+//USING_ZENJECT
 using UnityEngine;
 using TMPro;
+#if USING_ZENJECT
+using Zenject;
+#endif
 
 public class MainUI : MonoBehaviour
 {
     public GameObject GameLogic = null;
+    ILogController logController = null;
+    IGameController gameController = null;
     public RectTransform Header = null;
     public TMP_Text ScoreText = null;
     public TMP_Text LevelText = null;
     public TMP_Text HPText = null;
     private int screenWidth = -1;
 
+#if USING_ZENJECT
+    [Inject]
+#endif
+    private void Construct(ILogController logController, IGameController gameController)
+    {
+        this.logController = logController;
+        this.gameController = gameController;
+    }
+
     // Start is called before the first frame update
     void Start()
     {
-        var logController = GameLogic.GetComponent<ILogController>();
-        var gameController = GameLogic.GetComponent<IGameController>();
+#if !USING_ZENJECT
+        Construct(GameLogic.GetComponent<ILogController>(), GameLogic.GetComponent<IGameController>());
+#endif
         if (gameController == null)
         {
             logController.Error(nameof(gameController) + " is null");
-            return;
-        }
-        var spaceshipController = GameLogic.GetComponent<ISpaceshipController>();
-        if (spaceshipController == null)
-        {
-            logController.Error(nameof(spaceshipController) + " is null");
             return;
         }
         if (ScoreText != null)
